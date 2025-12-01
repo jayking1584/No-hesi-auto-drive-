@@ -20,7 +20,7 @@ local Logger = {
     log = function(self, category, ...)
         if not self.Enabled then return end
         local now = clock()
-        if now - self.LastLog > 0.25 then  -- Throttled logging
+        if now - self.LastLog > 0.25 then
             self.LastLog = now
         end
     end,
@@ -37,7 +37,6 @@ local FrameSynchronizer = {
     FrameBuffer = {},
     BufferSize = 3,
     
-    -- Store frame data for synchronized processing
     storeFrameData = function(self, frameType, data)
         if not self.FrameBuffer[self.CurrentFrameIndex] then
             self.FrameBuffer[self.CurrentFrameIndex] = {}
@@ -49,12 +48,10 @@ local FrameSynchronizer = {
         }
     end,
     
-    -- Get synchronized data for current frame
     getSynchronizedData = function(self)
         local currentFrame = self.FrameBuffer[self.CurrentFrameIndex] or {}
         local previousFrame = self.FrameBuffer[(self.CurrentFrameIndex - 1) % self.BufferSize] or {}
         
-        -- Merge data, preferring current frame but using previous if missing
         local synchronized = {}
         
         for key, value in pairs(currentFrame) do
@@ -70,11 +67,9 @@ local FrameSynchronizer = {
         return synchronized
     end,
     
-    -- Advance to next frame
     advanceFrame = function(self)
         self.CurrentFrameIndex = (self.CurrentFrameIndex + 1) % self.BufferSize
         
-        -- Clear old frame data
         if self.FrameBuffer[self.CurrentFrameIndex] then
             self.FrameBuffer[self.CurrentFrameIndex] = {}
         end
@@ -83,42 +78,35 @@ local FrameSynchronizer = {
 
 -- === ADVANCED RAYCAST SYSTEM ===
 local AdvancedRaycaster = {
-    -- Configuration
     Config = {
-        PrimaryRays = 9,            -- Main forward rays (including bumper)
-        LateralRays = 4,            -- Side obstacle detection
-        VerticalRays = 3,           -- Ground/slope detection
-        EmergencyRays = 13,         -- Extra rays for emergencies
-        BumperOffset = 4,           -- Forward from center
-        CurveDetectionRays = 5,     -- For curved wall detection
+        PrimaryRays = 9,
+        LateralRays = 4,
+        VerticalRays = 3,
+        EmergencyRays = 13,
+        BumperOffset = 4,
+        CurveDetectionRays = 5,
         MaxRayDistance = 250
     },
     
-    -- State
     RayParams = nil,
     FrameCache = {},
     LastFullScan = 0,
     
-    -- Collision groups for filtering
     CollisionGroups = {
         Debris = "Debris",
         Fences = "Fences",
         Decorations = "Decorations"
     },
     
-    -- Initialize
     initialize = function(self)
         self.RayParams = RaycastParams.new()
         self.RayParams.FilterType = Enum.RaycastFilterType.Blacklist
         self.RayParams.FilterDescendantsInstances = {}
         
-        -- Setup collision groups
         self:setupCollisionGroups()
     end,
     
-    -- Setup collision groups
     setupCollisionGroups = function(self)
-        -- Create collision groups if they don't exist
         for _, groupName in pairs(self.CollisionGroups) do
             if not PhysicsService:GetCollisionGroupData(groupName) then
                 PhysicsService:CreateCollisionGroup(groupName)
@@ -126,7 +114,6 @@ local AdvancedRaycaster = {
         end
     end,
     
-    -- Update filter with proper exclusions
     updateFilter = function(self, character, vehicle, vehicleSize)
         local filter = {}
         
@@ -137,7 +124,6 @@ local AdvancedRaycaster = {
         if vehicle then
             table.insert(filter, vehicle)
             
-            -- Include vehicle parts if it's a model
             if vehicle:IsA("Model") then
                 for _, part in pairs(vehicle:GetDescendants()) do
                     if part:IsA("BasePart") then
@@ -148,18 +134,14 @@ local AdvancedRaycaster = {
         end
         
         self.RayParams.FilterDescendantsInstances = filter
-        
-        -- Set collision groups to ignore
         self.RayParams.CollisionGroup = "Default"
     end,
     
-    -- Calculate ray origin at bumper (not center)
     calculateBumperOrigin = function(self, vehiclePosition, lookVector, vehicleSize)
         local length = (vehicleSize and vehicleSize.Z or 4) / 2
         return vehiclePosition + (lookVector * (length + self.Config.BumperOffset))
     end,
     
-    -- Perform curved ray pattern for wall detection
     performCurvedRayPattern = function(self, origin, lookVector, rightVector, baseDistance)
         local results = {
             Curves = {},
@@ -167,7 +149,6 @@ local AdvancedRaycaster = {
             CurveAngle = 0
         }
         
-        -- Multiple angles for curve detection
         local angles = {-60, -45, -30, -15, 15, 30, 45, 60}
         
         for _, angle in pairs(angles) do
@@ -196,7 +177,6 @@ local AdvancedRaycaster = {
             end
         end
         
-        -- Detect curve shape by comparing distances
         local leftAvg = 0
         local leftCount = 0
         local rightAvg = 0
@@ -221,13 +201,11 @@ local AdvancedRaycaster = {
         return results
     end,
     
-    -- Perform comprehensive scan
     performScan = function(self, vehiclePosition, vehicleCFrame, lookVector, vehicleSize, currentSpeed, isEmergency)
         local bumperOrigin = self:calculateBumperOrigin(vehiclePosition, lookVector, vehicleSize)
         local rightVector = vehicleCFrame.RightVector
         local upVector = vehicleCFrame.UpVector
         
-        -- Adaptive distances
         local baseDistance = math.min(self.Config.MaxRayDistance, 40 + currentSpeed * 2.0)
         local groundDistance = 20 + (vehicleSize and vehicleSize.Y or 2) * 2
         
@@ -239,7 +217,6 @@ local AdvancedRaycaster = {
             Ground = {}
         }
         
-        -- === PRIMARY FORWARD RAYS (from bumper) ===
         local forwardAngles = {-30, -15, 0, 15, 30}
         for _, angle in pairs(forwardAngles) do
             local rayDir = lookVector
@@ -259,7 +236,6 @@ local AdvancedRaycaster = {
             end
         end
         
-        -- === LATERAL RAYS ===
         for side = 1, 2 do
             local sideDir = side == 1 and -rightVector or rightVector
             local sideName = side == 1 and "Left" or "Right"
@@ -273,9 +249,8 @@ local AdvancedRaycaster = {
             end
         end
         
-        -- === GROUND/SLOPE DETECTION ===
         for i = -1, 1 do
-            local offset = rightVector * (i * 2)  -- Multiple points across vehicle
+            local offset = rightVector * (i * 2)
             local rayOrigin = vehiclePosition + offset + Vector3.new(0, 2, 0)
             local ray = Workspace:Raycast(rayOrigin, Vector3.new(0, -1, 0), groundDistance, self.RayParams)
             
@@ -288,21 +263,17 @@ local AdvancedRaycaster = {
             end
         end
         
-        -- === CURVED WALL DETECTION ===
         if currentSpeed > 50 or isEmergency then
             results.CurveData = self:performCurvedRayPattern(bumperOrigin, lookVector, rightVector, baseDistance)
         end
         
-        -- Store in cache
         self.FrameCache = results
         
-        -- Store in frame synchronizer
         FrameSynchronizer:storeFrameData("RayScan", results)
         
         return results
     end,
     
-    -- Get ground tilt angle
     getGroundTilt = function(self)
         if not self.FrameCache.Ground then
             return 0, Vector3.new(0, 1, 0)
@@ -335,30 +306,24 @@ local VehicleStateDetector = {
     VehicleSize = Vector3.new(2, 2, 4),
     LastDetection = 0,
     
-    -- Modular model detection patterns
     ModularPatterns = {
         "Wheel", "Axle", "Chassis", "Body", "Engine", "Seat"
     },
     
-    -- Initialize
     initialize = function(self)
     end,
     
-    -- Enhanced modular vehicle detection
     detectModularVehicle = function(self, startPart)
         if not startPart then return nil end
         
-        -- Check if part belongs to a vehicle assembly
         local rootPart = startPart.AssemblyRootPart or startPart
         
-        -- Look for vehicle indicators in the assembly
         local assemblyParts = rootPart:GetConnectedParts(true)
         
         local vehicleScore = 0
         local foundParts = {}
         
         for _, part in pairs(assemblyParts) do
-            -- Check part name against patterns
             local partName = part.Name:lower()
             for _, pattern in ipairs(self.ModularPatterns) do
                 if partName:find(pattern:lower()) then
@@ -368,7 +333,6 @@ local VehicleStateDetector = {
                 end
             end
             
-            -- Check for vehicle scripts in parent
             if part.Parent and part.Parent:IsA("Model") then
                 local model = part.Parent
                 if model:FindFirstChild("Drive") or model:FindFirstChild("VehicleController") then
@@ -390,7 +354,6 @@ local VehicleStateDetector = {
         return nil
     end,
     
-    -- Detect current vehicle
     detectVehicle = function(self)
         local now = clock()
         if now - self.LastDetection < 0.5 and self.CurrentVehicle then
@@ -405,7 +368,6 @@ local VehicleStateDetector = {
             return false
         end
         
-        -- Method 1: Direct VehicleSeat
         for _, child in pairs(character:GetChildren()) do
             if child:IsA("VehicleSeat") then
                 local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -419,13 +381,11 @@ local VehicleStateDetector = {
             end
         end
         
-        -- Method 2: Humanoid seat
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         if humanoid and humanoid.SeatPart then
             self.CurrentVehicle = humanoid.SeatPart
             self.VehicleRoot = humanoid.SeatPart.AssemblyRootPart or humanoid.SeatPart
             
-            -- Try modular detection
             local modularVehicle = self:detectModularVehicle(self.VehicleRoot)
             if modularVehicle then
                 self.VehicleType = "Modular"
@@ -437,7 +397,6 @@ local VehicleStateDetector = {
             return true
         end
         
-        -- Method 3: Proximity to vehicle parts
         local rootPart = character:FindFirstChild("HumanoidRootPart") or 
                         character:FindFirstChild("UpperTorso")
         
@@ -463,11 +422,9 @@ local VehicleStateDetector = {
         return false
     end,
     
-    -- Calculate vehicle properties
     calculateVehicleProperties = function(self)
         if not self.VehicleRoot then return end
         
-        -- Calculate mass
         self.VehicleMass = 0
         local parts = self.VehicleRoot:GetConnectedParts(true)
         for _, part in pairs(parts) do
@@ -476,7 +433,6 @@ local VehicleStateDetector = {
             end
         end
         
-        -- Get size from assembly or part
         if #parts > 0 then
             local min = Vector3.new(math.huge, math.huge, math.huge)
             local max = Vector3.new(-math.huge, -math.huge, -math.huge)
@@ -515,46 +471,34 @@ local VehicleStateDetector = {
         end
     end,
     
-    -- Get actual forward vector (handles orientation issues)
     getActualForwardVector = function(self, cframe, velocity)
-        -- Use velocity direction if moving fast
         local speed = velocity.Magnitude
         if speed > 5 then
             local velocityDir = velocity.Unit
             
-            -- Check if vehicle orientation matches velocity
             local lookDir = cframe.LookVector
             local dot = lookDir:Dot(velocityDir)
             
-            -- If orientation is off by more than 45 degrees, use velocity direction
             if dot < 0.7 then
-                return velocityDir, true  -- Using velocity direction
+                return velocityDir, true
             end
         end
         
-        return cframe.LookVector, false  -- Normal look vector
+        return cframe.LookVector, false
     end,
     
-    -- Check flip risk
     checkFlipRisk = function(self, angularVelocity)
         if not angularVelocity then return 0 end
         
-        -- Calculate flip risk based on angular velocity
         local risk = 0
         
-        -- Pitch risk (forward/backward flip)
         risk = risk + math.abs(angularVelocity.X) * 0.5
-        
-        -- Roll risk (side flip)
         risk = risk + math.abs(angularVelocity.Z) * 0.7
-        
-        -- Yaw risk (spinning)
         risk = risk + math.abs(angularVelocity.Y) * 0.3
         
         return math.min(risk, 1.0)
     end,
     
-    -- Reset
     reset = function(self)
         self.CurrentVehicle = nil
         self.VehicleRoot = nil
@@ -566,7 +510,6 @@ local VehicleStateDetector = {
 
 -- === STABILITY CONTROLLER ===
 local StabilityController = {
-    -- State
     State = {
         AngularVelocityHistory = {},
         VelocityHistory = {},
@@ -575,7 +518,6 @@ local StabilityController = {
         LastCorrection = 0
     },
     
-    -- Configuration
     Config = {
         HistorySize = 10,
         FlipThreshold = 2.5,
@@ -583,7 +525,6 @@ local StabilityController = {
         MaxAngularVelocity = 5.0
     },
     
-    -- Initialize
     initialize = function(self)
         self.State = {
             AngularVelocityHistory = {},
@@ -594,13 +535,10 @@ local StabilityController = {
         }
     end,
     
-    -- Update stability state
     update = function(self, angularVelocity, velocity, vehicleMass)
-        -- Update history
         table.insert(self.State.AngularVelocityHistory, angularVelocity or Vector3.new(0,0,0))
         table.insert(self.State.VelocityHistory, velocity or Vector3.new(0,0,0))
         
-        -- Keep history size
         while #self.State.AngularVelocityHistory > self.Config.HistorySize do
             table.remove(self.State.AngularVelocityHistory, 1)
         end
@@ -608,13 +546,10 @@ local StabilityController = {
             table.remove(self.State.VelocityHistory, 1)
         end
         
-        -- Calculate flip risk
         self.State.FlipRisk = self:calculateFlipRisk(angularVelocity, vehicleMass)
         
-        -- Update stability flag
         self.State.IsStable = self.State.FlipRisk < self.Config.FlipThreshold
         
-        -- Store in frame synchronizer
         FrameSynchronizer:storeFrameData("Stability", {
             FlipRisk = self.State.FlipRisk,
             IsStable = self.State.IsStable,
@@ -624,26 +559,21 @@ local StabilityController = {
         return self.State
     end,
     
-    -- Calculate flip risk with mass consideration
     calculateFlipRisk = function(self, angularVelocity, vehicleMass)
         if not angularVelocity then return 0 end
         
         local risk = 0
         
-        -- Mass factor (heavier vehicles are more stable)
         local massFactor = math.max(0.5, 1000 / (vehicleMass + 500))
         
-        -- Angular velocity components
-        local pitch = math.abs(angularVelocity.X)  -- Forward/backward flip
-        local roll = math.abs(angularVelocity.Z)   -- Side flip
-        local yaw = math.abs(angularVelocity.Y)    -- Spinning
+        local pitch = math.abs(angularVelocity.X)
+        local roll = math.abs(angularVelocity.Z)
+        local yaw = math.abs(angularVelocity.Y)
         
-        -- Weighted risk calculation
         risk = risk + pitch * 0.6 * massFactor
         risk = risk + roll * 0.8 * massFactor
         risk = risk + yaw * 0.3 * massFactor
         
-        -- History factor (if consistently high angular velocity)
         if #self.State.AngularVelocityHistory >= 3 then
             local avgAngular = Vector3.new(0,0,0)
             for _, av in ipairs(self.State.AngularVelocityHistory) do
@@ -658,7 +588,6 @@ local StabilityController = {
         return math.min(risk, 3.0)
     end,
     
-    -- Get correction for flip risk
     getCorrection = function(self)
         local now = clock()
         if now - self.State.LastCorrection < self.Config.CorrectionCooldown then
@@ -668,7 +597,6 @@ local StabilityController = {
         if self.State.FlipRisk > self.Config.FlipThreshold and #self.State.AngularVelocityHistory > 0 then
             local currentAngular = self.State.AngularVelocityHistory[#self.State.AngularVelocityHistory]
             
-            -- Counter the angular velocity
             local correction = Vector3.new(
                 -currentAngular.X * 0.4,
                 -currentAngular.Y * 0.2,
@@ -685,7 +613,6 @@ local StabilityController = {
 
 -- === ADVANCED STEERING CONTROLLER ===
 local AdvancedSteeringController = {
-    -- State
     State = {
         LastSteering = 0,
         SteeringHistory = {},
@@ -694,20 +621,18 @@ local AdvancedSteeringController = {
         LastStuckTime = 0
     },
     
-    -- Configuration
     Config = {
         BaseGain = 1.0,
         SpeedAdaptiveGain = true,
         MinGain = 0.5,
         MaxGain = 1.5,
-        EmergencySensitivity = 0.7,  -- Reduced from default
+        EmergencySensitivity = 0.7,
         LaneCenteringStrength = 0.4,
         DriftCompensation = 0.3,
         CurvePredictionStrength = 0.6,
         StuckTimeout = 2.0
     },
     
-    -- Initialize
     initialize = function(self)
         self.State = {
             LastSteering = 0,
@@ -718,72 +643,58 @@ local AdvancedSteeringController = {
         }
     end,
     
-    -- Calculate steering with drift compensation
     calculate = function(self, targetSteering, currentSteering, currentSpeed, deltaTime, isDrifting)
-        -- Speed-adaptive gain
         local gain = self.Config.BaseGain
         
         if self.Config.SpeedAdaptiveGain then
             if currentSpeed > 140 then
-                -- High-speed gain reduction for stability
                 gain = gain * (1 - ((currentSpeed - 140) / 100) * 0.5)
                 gain = math.max(gain, self.Config.MinGain)
             elseif currentSpeed < 30 then
-                -- Low-speed gain increase for responsiveness
                 gain = gain * 1.2
                 gain = math.min(gain, self.Config.MaxGain)
             end
         end
         
-        -- Drift compensation
         local driftCompensation = 0
         if isDrifting and currentSpeed > 100 then
             driftCompensation = self.Config.DriftCompensation * (currentSpeed / 200)
         end
         
-        -- Calculate error
         local error = targetSteering - currentSteering
         
-        -- Apply gain and compensation
         local rawOutput = error * gain
         
-        -- Apply drift compensation
         if isDrifting and math.abs(rawOutput) > 0.3 then
             rawOutput = rawOutput * (1 + driftCompensation)
         end
         
-        -- Smooth with history
         table.insert(self.State.SteeringHistory, rawOutput)
         while #self.State.SteeringHistory > 5 do
             table.remove(self.State.SteeringHistory, 1)
         end
         
-        -- Moving average smoothing
         local smoothed = 0
         for _, val in ipairs(self.State.SteeringHistory) do
             smoothed = smoothed + val
         end
         smoothed = smoothed / #self.State.SteeringHistory
         
-        -- Clamp final output
         local finalSteering = math.clamp(smoothed, -1, 1)
         self.State.LastSteering = finalSteering
         
         return finalSteering
     end,
     
-    -- Emergency steering with dynamic sensitivity
     calculateEmergencySteering = function(self, forwardDist, leftDist, rightDist, currentSpeed, timeInEmergency)
-        -- Dynamic sensitivity based on time in emergency
         local sensitivity = self.Config.EmergencySensitivity
         
         if timeInEmergency > 1.0 then
-            sensitivity = sensitivity * 0.7  -- Reduce sensitivity if stuck
+            sensitivity = sensitivity * 0.7
         elseif timeInEmergency > 0.5 then
             sensitivity = sensitivity * 0.85
         end
         
-        -- Increased threshold for tight maps
         local emergencyThreshold = 35 * (currentSpeed / 100 + 0.5)
         
         if forwardDist > emergencyThreshold then
@@ -792,17 +703,14 @@ local AdvancedSteeringController = {
         
         local urgency = 1 - (forwardDist / emergencyThreshold)
         
-        -- Check all sides with weighted clearance
         local leftClearance = leftDist
         local rightClearance = rightDist
         
-        -- Check if both sides are blocked
         local bothBlocked = leftClearance < 15 and rightClearance < 15
         
         if bothBlocked then
-            -- Stuck situation - slowly back up
             self.State.LastStuckTime = clock()
-            return 0  -- Let throttle controller handle braking
+            return 0
         end
         
         local emergencySteering = 0
@@ -817,7 +725,6 @@ local AdvancedSteeringController = {
             emergencySteering = 0.6 * urgency * sensitivity
         end
         
-        -- Speed-based reduction
         if currentSpeed > 80 then
             emergencySteering = emergencySteering * (80 / currentSpeed)
         end
@@ -825,23 +732,19 @@ local AdvancedSteeringController = {
         return emergencySteering
     end,
     
-    -- Lane centering with curve prediction
     calculateLaneCentering = function(self, leftDist, rightDist, currentSpeed, curvePrediction)
         if leftDist > 40 and rightDist > 40 then
-            return 0  -- No correction in open space
+            return 0
         end
         
-        -- Calculate normalized error
         local total = leftDist + rightDist
         if total < 0.1 then return 0 end
         
         local normalizedError = (rightDist - leftDist) / total
         
-        -- Apply curve prediction
         local curveInfluence = curvePrediction * self.Config.CurvePredictionStrength
         normalizedError = normalizedError + curveInfluence
         
-        -- Diminishing returns
         local absError = math.abs(normalizedError)
         local centering = 0
         
@@ -855,13 +758,11 @@ local AdvancedSteeringController = {
             centering = normalizedError * 0.05
         end
         
-        -- Speed adjustment
         local speedFactor = math.clamp(1 - (currentSpeed / 150) * 0.2, 0.5, 1.0)
         
         return centering * speedFactor
     end,
     
-    -- Predict curves using angular velocity history
     predictCurve = function(self, angularVelocityHistory, currentSpeed)
         if #angularVelocityHistory < 3 then
             return 0
@@ -873,14 +774,12 @@ local AdvancedSteeringController = {
         end
         avgYaw = avgYaw / #angularVelocityHistory
         
-        -- Scale by speed (faster = more prediction needed)
         local prediction = avgYaw * 0.5 * (currentSpeed / 100)
         
         self.State.CurvePrediction = prediction
         return prediction
     end,
     
-    -- Check if vehicle is drifting
     isDrifting = function(self, lookVector, velocity, angularVelocity)
         if not velocity or velocity.Magnitude < 20 then
             return false
@@ -889,10 +788,8 @@ local AdvancedSteeringController = {
         local velocityDir = velocity.Unit
         local lookDir = lookVector
         
-        -- Angle between velocity and look direction
         local angle = math.deg(math.acos(velocityDir:Dot(lookDir)))
         
-        -- Check angular velocity for spinning
         local isSpinning = angularVelocity and math.abs(angularVelocity.Y) > 1.5
         
         return angle > 15 or isSpinning
@@ -901,7 +798,6 @@ local AdvancedSteeringController = {
 
 -- === ADVANCED THROTTLE CONTROLLER ===
 local AdvancedThrottleController = {
-    -- State with bounded history
     State = {
         CurrentThrottle = 0,
         CurrentBrake = 0,
@@ -911,7 +807,6 @@ local AdvancedThrottleController = {
         LastTractionUpdate = 0
     },
     
-    -- Configuration
     Config = {
         MaxSpeed = 200,
         AccelerationCurve = 1.5,
@@ -924,7 +819,6 @@ local AdvancedThrottleController = {
         TractionUpdateRate = 0.1
     },
     
-    -- Initialize
     initialize = function(self)
         self.State = {
             CurrentThrottle = 0,
@@ -936,7 +830,6 @@ local AdvancedThrottleController = {
         }
     end,
     
-    -- Calculate traction from acceleration vs throttle
     calculateTraction = function(self, currentSpeed, currentThrottle, deltaTime)
         local now = clock()
         if now - self.State.LastTractionUpdate < self.Config.TractionUpdateRate then
@@ -949,7 +842,6 @@ local AdvancedThrottleController = {
             return 1.0
         end
         
-        -- Calculate acceleration
         local recentSpeeds = {}
         local count = math.min(5, #self.State.SpeedHistory)
         
@@ -965,67 +857,54 @@ local AdvancedThrottleController = {
         
         local acceleration = (recentSpeeds[#recentSpeeds] - recentSpeeds[1]) / (count * deltaTime)
         
-        -- Expected acceleration based on throttle
-        local expectedAccel = currentThrottle * 30  -- Arbitrary scaling
+        local expectedAccel = currentThrottle * 30
         
-        -- Calculate traction ratio
         local traction = 1.0
         if expectedAccel > 0 and acceleration > 0 then
             traction = math.min(1.0, acceleration / expectedAccel)
         end
         
-        -- Update state
         self.State.Traction = self.State.Traction * 0.7 + traction * 0.3
         
         return self.State.Traction
     end,
     
-    -- Calculate throttle with traction control
     calculate = function(self, forwardDistance, currentSpeed, targetSpeed, 
                         isAirborne, angularVelocity, lookVector, currentThrottle, deltaTime)
         
-        -- Update speed history (bounded)
         table.insert(self.State.SpeedHistory, currentSpeed)
         while #self.State.SpeedHistory > self.Config.MaxHistorySize do
             table.remove(self.State.SpeedHistory, 1)
         end
         
-        -- Calculate traction
         local traction = self:calculateTraction(currentSpeed, currentThrottle, deltaTime)
         
-        -- Time to obstacle
         local timeToObstacle = forwardDistance / math.max(1, currentSpeed)
         
         local throttle = 1.0
         local brake = 0.0
         
-        -- Speed limiting
         if currentSpeed > targetSpeed then
             throttle = self.Config.MinThrottle
             brake = 0.2
         end
         
-        -- Early braking with traction consideration
         if timeToObstacle < self.Config.EarlyBrakeTime and forwardDistance < 100 then
             local brakeIntensity = 1 - (timeToObstacle / self.Config.EarlyBrakeTime)
             
-            -- Reduce braking if traction is low
             brakeIntensity = brakeIntensity * traction
             
             throttle = throttle * (1 - brakeIntensity * 0.7)
             brake = math.max(brake, brakeIntensity * 0.5)
         end
         
-        -- Traction control
         throttle = throttle * traction
         
-        -- Airborne handling
         if isAirborne then
             throttle = throttle * 0.3
             brake = math.min(0.3, brake + 0.1)
         end
         
-        -- Apply curves
         if throttle > 0 then
             local normalized = (throttle - self.Config.MinThrottle) / (1 - self.Config.MinThrottle)
             throttle = self.Config.MinThrottle + normalized ^ self.Config.AccelerationCurve
@@ -1035,13 +914,11 @@ local AdvancedThrottleController = {
             brake = brake ^ self.Config.BrakeCurve
         end
         
-        -- Smooth transitions
         self.State.CurrentThrottle = self.State.CurrentThrottle * self.Config.SpeedSmoothing + 
                                     throttle * (1 - self.Config.SpeedSmoothing)
         self.State.CurrentBrake = self.State.CurrentBrake * self.Config.SpeedSmoothing + 
                                  brake * (1 - self.Config.SpeedSmoothing)
         
-        -- Clamp values
         self.State.CurrentThrottle = math.clamp(self.State.CurrentThrottle, 0, 1)
         self.State.CurrentBrake = math.clamp(self.State.CurrentBrake, 0, 1)
         
@@ -1052,7 +929,6 @@ local AdvancedThrottleController = {
         }
     end,
     
-    -- Emergency braking with stuck detection
     emergencyBrake = function(self, forwardDistance, currentSpeed, isStuck)
         if forwardDistance < 25 or isStuck then
             local stoppingDistance = currentSpeed * 0.8 + 10
@@ -1061,16 +937,14 @@ local AdvancedThrottleController = {
             if urgency > 0 then
                 local brake = math.min(1.0, urgency * 1.3)
                 
-                -- ABS simulation
                 if brake > 0.8 and currentSpeed > 30 then
                     brake = 0.75 + math.sin(clock() * 10) * 0.05
                 end
                 
-                -- If stuck, apply reverse
                 local reverse = isStuck and 0.3 or 0
                 
                 return {
-                    Throttle = -reverse,  -- Reverse throttle
+                    Throttle = -reverse,
                     Brake = brake,
                     Emergency = true,
                     IsStuck = isStuck
@@ -1084,22 +958,18 @@ local AdvancedThrottleController = {
 
 -- === VEHICLE CONTROL ADAPTER ===
 local VehicleControlAdapter = {
-    -- Control methods for different vehicle types
     ControlMethods = {},
     CurrentMethod = nil,
     
-    -- Mass-based PID parameters
     MassBasedPID = {
-        [100] = {P = 800, D = 50},   -- Light
-        [500] = {P = 1200, D = 100}, -- Medium
-        [2000] = {P = 2000, D = 200} -- Heavy
+        [100] = {P = 800, D = 50},
+        [500] = {P = 1200, D = 100},
+        [2000] = {P = 2000, D = 200}
     },
     
-    -- Initialize
     initialize = function(self)
     end,
     
-    -- Get appropriate PID for vehicle mass
     getMassBasedPID = function(self, mass)
         local closestMass = 100
         local minDiff = math.huge
@@ -1115,7 +985,6 @@ local VehicleControlAdapter = {
         return self.MassBasedPID[closestMass] or {P = 1000, D = 100}
     end,
     
-    -- Setup control for vehicle
     setupControl = function(self, vehicleRoot, vehicleType, vehicleMass)
         if vehicleType == "VehicleSeat" then
             return self:setupVehicleSeatControl(vehicleRoot)
@@ -1124,7 +993,6 @@ local VehicleControlAdapter = {
         end
     end,
     
-    -- Setup VehicleSeat control
     setupVehicleSeatControl = function(self, seat)
         return {
             Type = "VehicleSeat",
@@ -1175,20 +1043,15 @@ local VehicleControlAdapter = {
             end,
             
             Cleanup = function()
-                -- Nothing to cleanup
             end
         }
     end,
     
-    -- Setup BodyVelocity/BodyGyro control with mass-based tuning
     setupBodyControl = function(self, vehicleRoot, vehicleMass)
-        -- Clean up old controls
         self:cleanupControl(vehicleRoot)
         
-        -- Get appropriate PID parameters
         local pid = self:getMassBasedPID(vehicleMass)
         
-        -- Create controls
         local bodyVelocity = Instance.new("BodyVelocity")
         bodyVelocity.Name = "AutoPilotVelocity"
         bodyVelocity.Parent = vehicleRoot
@@ -1259,7 +1122,6 @@ local VehicleControlAdapter = {
         }
     end,
     
-    -- Clean up controls
     cleanupControl = function(self, vehicleRoot)
         if vehicleRoot then
             local velocity = vehicleRoot:FindFirstChild("AutoPilotVelocity")
@@ -1273,11 +1135,9 @@ local VehicleControlAdapter = {
 
 -- === MAIN AUTO-PILOT CONTROLLER ===
 local AutoPilot = {
-    -- Core state
     Enabled = false,
     Running = false,
     
-    -- Configuration
     Config = {
         MaxSpeed = 200,
         BaseUpdateRate = 0.033,
@@ -1286,7 +1146,6 @@ local AutoPilot = {
         EmergencyTimeout = 3.0
     },
     
-    -- System state
     State = {
         CurrentSpeed = 0,
         Steering = 0,
@@ -1299,13 +1158,11 @@ local AutoPilot = {
         TimeInEmergency = 0
     },
     
-    -- Performance
     Performance = {
         LastFrameTime = 0,
         AverageDelta = 0.016
     },
     
-    -- Initialize all systems
     initialize = function(self)
         FrameSynchronizer:advanceFrame()
         AdvancedRaycaster:initialize()
@@ -1318,23 +1175,19 @@ local AutoPilot = {
         self.State.LastModeChange = clock()
     end,
     
-    -- Start auto-pilot
     start = function(self)
         if self.Running then return end
         
         self.Running = true
         self:initialize()
         
-        -- Start main loop
         self:mainLoop()
     end,
     
-    -- Stop auto-pilot
     stop = function(self)
         self.Running = false
         self.Enabled = false
         
-        -- Release controls
         local control = VehicleControlAdapter.CurrentMethod
         if control then
             pcall(function()
@@ -1347,7 +1200,6 @@ local AutoPilot = {
             end)
         end
         
-        -- Reset states
         VehicleStateDetector:reset()
         StabilityController:initialize()
         AdvancedSteeringController:initialize()
@@ -1356,7 +1208,6 @@ local AutoPilot = {
         self.State.Mode = "INACTIVE"
     end,
     
-    -- Main synchronized loop
     mainLoop = function(self)
         local lastFrameTime = clock()
         
@@ -1365,10 +1216,8 @@ local AutoPilot = {
             local deltaTime = currentTime - lastFrameTime
             lastFrameTime = currentTime
             
-            -- Update frame synchronizer
             FrameSynchronizer:advanceFrame()
             
-            -- Adaptive update rate
             local updateRate = self.Config.BaseUpdateRate
             if self.State.Mode == "EMERGENCY" or self.State.CurrentSpeed > 150 then
                 updateRate = self.Config.CriticalUpdateRate
@@ -1376,14 +1225,12 @@ local AutoPilot = {
                 updateRate = self.Config.MinUpdateRate
             end
             
-            -- Detect vehicle
             if not VehicleStateDetector:detectVehicle() then
                 self.State.Mode = "NO_VEHICLE"
-                task.wait(updateRate)
+                wait(updateRate)
                 goto continue
             end
             
-            -- Setup control if not already done
             if not VehicleControlAdapter.CurrentMethod then
                 VehicleControlAdapter.CurrentMethod = VehicleControlAdapter:setupControl(
                     VehicleStateDetector.VehicleRoot,
@@ -1392,24 +1239,21 @@ local AutoPilot = {
                 )
             end
             
-            -- Run auto-pilot if enabled
             if self.Enabled then
                 self:processFrame(deltaTime)
             end
             
             ::continue::
             
-            -- Calculate exact wait time
             local elapsed = clock() - currentTime
             local waitTime = math.max(0.001, updateRate - elapsed)
             
             if waitTime > 0 then
-                task.wait(waitTime)
+                wait(waitTime)
             end
         end
     end,
     
-    -- Process synchronized frame
     processFrame = function(self, deltaTime)
         local control = VehicleControlAdapter.CurrentMethod
         if not control then
@@ -1417,32 +1261,26 @@ local AutoPilot = {
             return
         end
         
-        -- Get synchronized vehicle state
         local position = control.GetPosition()
         local cframe = control.GetCFrame()
         local velocity = control.GetVelocity()
         local angularVelocity = control.GetAngularVelocity()
         local vehicleSize = control.GetSize()
         
-        -- Get actual forward vector (handles orientation issues)
         local lookVector, usingVelocityDir = VehicleStateDetector:getActualForwardVector(cframe, velocity)
         local rightVector = cframe.RightVector
         
-        -- Calculate forward speed
         local forwardSpeed = math.max(0, velocity:Dot(lookVector))
         self.State.CurrentSpeed = forwardSpeed
         
-        -- Update raycast filter
         AdvancedRaycaster:updateFilter(
             player.Character, 
             VehicleStateDetector.CurrentVehicle,
             vehicleSize
         )
         
-        -- Update stability
         local stability = StabilityController:update(angularVelocity, velocity, VehicleStateDetector.VehicleMass)
         
-        -- Check if emergency mode needed
         local isEmergency = stability.FlipRisk > 2.0 or forwardSpeed > 180
         
         if isEmergency and self.State.Mode ~= "EMERGENCY" then
@@ -1453,26 +1291,20 @@ local AutoPilot = {
             self.State.TimeInEmergency = clock() - self.State.EmergencyStartTime
         end
         
-        -- Perform raycasting
         local rayResults = AdvancedRaycaster:performScan(
             position, cframe, lookVector, vehicleSize, forwardSpeed, isEmergency
         )
         
-        -- Get ground tilt
         local groundTilt, groundNormal = AdvancedRaycaster:getGroundTilt()
         
-        -- Check stuck condition
         local isStuck = self.State.TimeInEmergency > self.Config.EmergencyTimeout and 
                        (rayResults.Distances.Forward_0 or 1000) < 10
         
-        -- === STEERING CALCULATION ===
         local steeringInputs = {}
         
-        -- Get synchronized data
         local syncData = FrameSynchronizer:getSynchronizedData()
         local prevRayData = syncData.RayScan or {}
         
-        -- Path following using forward rays
         local weightedAngle = 0
         local totalWeight = 0
         
@@ -1494,7 +1326,6 @@ local AutoPilot = {
             steeringInputs.pathFollowing = 0
         end
         
-        -- Lane centering with curve prediction
         local curvePrediction = 0
         if rayResults.CurveData then
             curvePrediction = rayResults.CurveData.CurveAngle / 90
@@ -1507,10 +1338,8 @@ local AutoPilot = {
             curvePrediction
         )
         
-        -- Check if drifting
         local isDrifting = AdvancedSteeringController:isDrifting(lookVector, velocity, angularVelocity)
         
-        -- Emergency avoidance
         steeringInputs.emergency = AdvancedSteeringController:calculateEmergencySteering(
             rayResults.Distances.Forward_0 or 1000,
             rayResults.Distances.Left_1 or 1000,
@@ -1519,7 +1348,6 @@ local AutoPilot = {
             self.State.TimeInEmergency
         )
         
-        -- Wall avoidance
         local wallAvoidance = 0
         local leftDist = rayResults.Distances.Left_1 or 1000
         local rightDist = rayResults.Distances.Right_1 or 1000
@@ -1531,45 +1359,37 @@ local AutoPilot = {
             wallAvoidance = wallAvoidance - 0.5
         end
         
-        -- Curve prediction from angular velocity history
         local angularHistory = stability.AngularVelocityHistory or {}
         local angularPrediction = AdvancedSteeringController:predictCurve(angularHistory, forwardSpeed)
         steeringInputs.curvePrediction = angularPrediction
         
-        -- Get stability correction
         local stabilityCorrection = StabilityController:getCorrection()
         
-        -- Calculate target steering
         local targetSteering = steeringInputs.pathFollowing * 0.6 +
                               steeringInputs.laneCentering * 0.3 +
                               steeringInputs.emergency * 0.8 +
                               wallAvoidance * 0.4 +
                               steeringInputs.curvePrediction * 0.5
         
-        -- Add stability correction
         targetSteering = targetSteering + stabilityCorrection.Y * 0.3
         
-        -- Clamp target
         targetSteering = math.clamp(targetSteering, -1, 1)
         
-        -- Apply steering with drift compensation
         local finalSteering = AdvancedSteeringController:calculate(
             targetSteering, self.State.Steering, forwardSpeed, deltaTime, isDrifting
         )
         
-        -- === THROTTLE CONTROL ===
         local throttleControl = AdvancedThrottleController:calculate(
             rayResults.Distances.Forward_0 or 1000,
             forwardSpeed,
             self.Config.MaxSpeed,
-            false,  -- isAirborne
+            false,
             angularVelocity,
             lookVector,
             self.State.Throttle,
             deltaTime
         )
         
-        -- Emergency braking check
         if (rayResults.Distances.Forward_0 or 1000) < 30 and forwardSpeed > 50 then
             local emergencyBrake = AdvancedThrottleController:emergencyBrake(
                 rayResults.Distances.Forward_0 or 1000,
@@ -1585,12 +1405,10 @@ local AutoPilot = {
             end
         end
         
-        -- === UPDATE STATE ===
         self.State.Steering = finalSteering
         self.State.Throttle = throttleControl.Throttle
         self.State.Brake = throttleControl.Brake
         
-        -- Update mode
         if self.State.Mode ~= "EMERGENCY" then
             if forwardSpeed > 150 then
                 self.State.Mode = "HIGH_SPEED"
@@ -1605,7 +1423,6 @@ local AutoPilot = {
             end
         end
         
-        -- Confidence calculation
         self.State.Confidence = math.clamp(
             ((rayResults.Distances.Forward_0 or 1000) / 200) * 0.4 + 
             (1 - math.abs(finalSteering)) * 0.3 +
@@ -1614,7 +1431,6 @@ local AutoPilot = {
             0.1, 1.0
         )
         
-        -- Store in frame synchronizer
         FrameSynchronizer:storeFrameData("VehicleState", {
             Speed = forwardSpeed,
             Steering = finalSteering,
@@ -1622,7 +1438,6 @@ local AutoPilot = {
             Confidence = self.State.Confidence
         })
         
-        -- === APPLY CONTROLS ===
         pcall(function()
             control.SetSteer(finalSteering)
             control.SetThrottle(throttleControl.Throttle)
@@ -1635,7 +1450,9 @@ local AutoPilot = {
 local function createSimpleGUI()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "AutoPilotGUI"
-    screenGui.Parent = player:WaitForChild("PlayerGui")
+    if player:FindFirstChild("PlayerGui") then
+        screenGui.Parent = player.PlayerGui
+    end
     
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(0, 280, 0, 140)
@@ -1689,11 +1506,10 @@ end
 local gui = createSimpleGUI()
 
 -- Start the system
-task.spawn(function()
-    task.wait(2)  -- Wait for game to load
+coroutine.resume(coroutine.create(function()
+    wait(2)
     AutoPilot:start()
     
-    -- Auto-update GUI
     while true do
         if gui.Status then
             local modeColors = {
@@ -1718,6 +1534,6 @@ task.spawn(function()
                 math.floor(AutoPilot.State.Confidence * 100)
             )
         end
-        task.wait(0.3)
+        wait(0.3)
     end
-end)
+end))
