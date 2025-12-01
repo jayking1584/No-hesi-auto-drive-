@@ -1225,25 +1225,23 @@ local AutoPilot = {
                 updateRate = self.Config.MinUpdateRate
             end
             
-            if not VehicleStateDetector:detectVehicle() then
+            local vehicleDetected = VehicleStateDetector:detectVehicle()
+            
+            if vehicleDetected then
+                if not VehicleControlAdapter.CurrentMethod then
+                    VehicleControlAdapter.CurrentMethod = VehicleControlAdapter:setupControl(
+                        VehicleStateDetector.VehicleRoot,
+                        VehicleStateDetector.VehicleType,
+                        VehicleStateDetector.VehicleMass
+                    )
+                end
+                
+                if self.Enabled then
+                    self:processFrame(deltaTime)
+                end
+            else
                 self.State.Mode = "NO_VEHICLE"
-                wait(updateRate)
-                goto continue
             end
-            
-            if not VehicleControlAdapter.CurrentMethod then
-                VehicleControlAdapter.CurrentMethod = VehicleControlAdapter:setupControl(
-                    VehicleStateDetector.VehicleRoot,
-                    VehicleStateDetector.VehicleType,
-                    VehicleStateDetector.VehicleMass
-                )
-            end
-            
-            if self.Enabled then
-                self:processFrame(deltaTime)
-            end
-            
-            ::continue::
             
             local elapsed = clock() - currentTime
             local waitTime = math.max(0.001, updateRate - elapsed)
@@ -1506,7 +1504,7 @@ end
 local gui = createSimpleGUI()
 
 -- Start the system
-coroutine.resume(coroutine.create(function()
+local function startSystem()
     wait(2)
     AutoPilot:start()
     
@@ -1536,4 +1534,6 @@ coroutine.resume(coroutine.create(function()
         end
         wait(0.3)
     end
-end))
+end
+
+spawn(startSystem)
